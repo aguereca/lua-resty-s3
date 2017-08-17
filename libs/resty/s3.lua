@@ -28,7 +28,7 @@ _M._VERSION = '0.01'
 
 local mt = { __index = _M }
 
-function _M:new(aws_access_key, aws_secret_key, aws_bucket, args)    
+function _M:new(aws_access_key, aws_secret_key, aws_bucket, args)
     if not aws_access_key then
         return nil, "must provide aws_access_key"
     end
@@ -36,7 +36,7 @@ function _M:new(aws_access_key, aws_secret_key, aws_bucket, args)
         return nil, "must provide aws_secret_key"
     end
 
-    local host = aws_bucket .. ".s3.amazonaws.com"
+    local host = "s3.amazonaws.com"
     local timeout = 5
     local aws_region = nil
     if args and type(args) == 'table' then
@@ -58,7 +58,7 @@ function _M:new(aws_access_key, aws_secret_key, aws_bucket, args)
     end
 
     local auth = s3_auth:new(aws_access_key, aws_secret_key, aws_bucket, aws_region, nil)
-    host = aws_bucket .. ".s3" .. "-" .. aws_region .. ".amazonaws.com"
+    host = aws_bucket .. "." .. host
     return setmetatable({ auth=auth, host=host, aws_region=aws_region,timeout=timeout}, mt)
 end
 
@@ -199,7 +199,7 @@ end
 function _M:list(prefix, delimiter, page_size, marker)
     prefix = prefix or ""
     prefix = proc_uri(prefix)
-    local url = "http://" .. self.host .. "/?prefix=" .. prefix 
+    local url = "http://" .. self.host .. "/?prefix=" .. prefix
     if delimiter then
         url = url .. "&delimiter=" .. delimiter
     end
@@ -247,7 +247,7 @@ end
 function _M:start_multi_upload(key)
     key = proc_uri(key)
     local url = "http://" .. self.host .. "/" .. key .. "?uploads"
-    
+
     local myheaders = util.new_headers()
     local authorization = self.auth:authorization_v4("POST", url, myheaders, nil)
     ngx.log(ngx.INFO, "headers [", cjson.encode(myheaders), "]")
@@ -289,7 +289,7 @@ function get_bucket_location(s3auth, host, timeout)
 
     local myheaders = util.new_headers()
     local authorization = s3auth:authorization_v4("GET", url, myheaders, nil)
-    
+
     -- TODO: check authorization.
     local res, err, req_debug = util.http_get(url, myheaders, timeout)
     if not res then
