@@ -115,7 +115,7 @@ function _M.uri_encode(arg, encodeSlash, cd)
         elseif ch == '/' then
             if encodeSlash then
                 table.insert(chars, "%2F")
-            else 
+            else
                 table.insert(chars, ch)
             end
         else
@@ -153,7 +153,7 @@ _M.strnameservers = nil
 function _M.dns_init()
     --ngx.log(nxg.INFO, "############# dns_init ##############")
     local resolv_file = "/etc/resolv.conf"
-       
+
     ngx.log(ngx.INFO, "init dns from resolv_file:", resolv_file)
     local dns_svr = {"8.8.8.8"}
     local resolvs = readresolv(resolv_file)
@@ -190,7 +190,7 @@ function _M.dns_init()
             end
             table.insert(_M.strnameservers, dns_svr)
             --ngx.log(ngx.INFO, "DNS:", dns_svr)
-        end        
+        end
     else
         table.insert(_M.nameservers, "8.8.8.8")
         table.insert(_M.nameservers, {"8.8.4.4", 53})
@@ -208,7 +208,7 @@ function _M.is_ip(strip)
 end
 
 function _M.dns_query(domain)
-    local dns_key = "dns:" .. domain 
+    local dns_key = "dns:" .. domain
     local s3_cache = ngx.shared.s3_cache
     if s3_cache then
         local v = s3_cache:get(dns_key)
@@ -219,7 +219,7 @@ function _M.dns_query(domain)
     end
 
     local resolver = require "resty.dns.resolver"
-    
+
     local answers = nil
     local err = nil
     local dns_query_timeout = dns_query_timeout or 5000
@@ -235,17 +235,17 @@ function _M.dns_query(domain)
             retrans = 3,  -- 5 retransmissions on receive timeout
             timeout = dns_query_timeout,  -- 2 sec
         }
-       
+
         if not r then
             ngx.log(ngx.ERR, "failed to instantiate the dns resolver: ", err)
-        else 
+        else
 
             r:set_timeout(dns_query_timeout)
             answers, err= r:query(domain)
             if answers and not answers.errcode and table.getn(answers) > 0 then
                 -- 成功了。
                 ngx.log(ngx.INFO, "........... answers:", table.getn(answers))
-                break 
+                break
             end
 
             if answers then
@@ -256,7 +256,7 @@ function _M.dns_query(domain)
                 end
             else
                 ngx.log(ngx.ERR, "failed to query the DNS server: ", err)
-            end           
+            end
         end
     end
     if not answers then
@@ -285,7 +285,7 @@ function _M.dns_query(domain)
         ngx.log(ngx.ERR, string.format("invalid ip [%s] from the dns response!", addr.address))
         return nil
     end
-    
+
     ngx.log(ngx.INFO, "dns query:{domain:",domain, ", address:", addr.address, ", ttl:", addr.ttl, "}")
 
     if addr.ttl == 0 then
@@ -364,32 +364,38 @@ function _M.get_resolver_url(url)
     end
 
     local xurl = url
+    -- TODO: Use regex capture groups instead of:
+    local schema = nil
     if string.sub(url, 1, 7) == "http://" then
-        xurl = string.sub(url, 8)
+      xurl = string.sub(url, 8)
+      schema = 'http://'
+    elseif string.sub(url, 1, 8) == "https://" then
+      xurl = string.sub(url, 9)
+      schema = 'https://'
     end
 
     -- print(xurl)
     local m = string.match(xurl, "^%d+.%d+.%d+.%d+")
-    if m then -- 直接使用IP地址的。
+    if m then -- Use the IP address directly
         return url,nil
-    else -- 使用域名的。
-        
-        local index = string.find(xurl, "[:/]", 1)        
+    else -- Else - use the domain name.
+
+        local index = string.find(xurl, "[:/]", 1)
         local host = xurl
         local rest = nil
         if index then
             host = string.sub(xurl, 1, index-1)
             rest = string.sub(xurl, index)
         end
-        
-        -- 解析域名。。
+
+        -- Parse the domain name.
         local addr = _M.dns_query(host)
         if addr == nil then
             ngx.log(ngx.ERR, "dns_query(", host, ") failed!")
             return nil, "dns query failed for host '" .. host .. "' "
         end
 
-        local addr_full = "http://" .. addr
+        local addr_full = schema .. addr
         if rest then
             addr_full = addr_full .. rest
         end
@@ -433,13 +439,13 @@ local function http_req(method, uri, body, myheaders, timeout)
     if method == "PUT" or method == "POST" then
         local debug_body = nil
         local content_type = myheaders["Content-Type"]
-        if content_type == nil or _M.startswith(content_type, "text") then 
+        if content_type == nil or _M.startswith(content_type, "text") then
             if string.len(body) < 1024 then
                 debug_body = body
             else
                 debug_body = string.sub(body, 1, 1024)
             end
-        else 
+        else
             debug_body = "[[not text body: " .. tostring(content_type) .. "]]"
         end
         req_debug = "curl -v -X " .. method .. " " .. _M.headerstr(myheaders) .. " '" .. uri .. "' -d '" .. debug_body .. "' -o /dev/null"
@@ -459,8 +465,8 @@ local function http_req(method, uri, body, myheaders, timeout)
         ngx.log(ngx.ERR, "FAIL REQUEST [ ",req_debug, " ] err:", err, ", cost:", cost)
     elseif res.status >= 400 then
         ngx.log(ngx.ERR, "FAIL REQUEST [ ",req_debug, " ] status:", res.status, ", const:", cost)
-    else 
-        ngx.log(ngx.INFO, "REQUEST [ ",req_debug, " ] status:", res.status, ", const:", cost)
+    else
+        ngx.log(ngx.DEBUG, "REQUEST [ ",req_debug, " ] status:", res.status, ", const:", cost)
     end
     return res, err, req_debug
 end
@@ -471,7 +477,7 @@ local function url_302_get(url)
     if s3_cache == nil then
         return nil
     end
-    local key = url .. "-302" 
+    local key = url .. "-302"
     --ngx.log(ngx.DEBUG, "key:", key)
     local url_md5 = ngx.md5(key)
     local v = s3_cache:get(url_md5)
@@ -488,7 +494,7 @@ local function url_302_set(url, url_302, exptime)
     if s3_cache == nil then
         return
     end
-    local key = url .. "-302" 
+    local key = url .. "-302"
     --ngx.log(ngx.DEBUG, "key:", key)
     local url_md5 = ngx.md5(key)
     local ok, err = s3_cache:set(url_md5, url_302, exptime)
@@ -513,7 +519,7 @@ function http_req_3xx(method, uri, body, myheaders, timeout)
             uri_302 = url_302_get(req_uri)
             if uri_302 and type(uri_302) == 'string' then
                 req_uri = uri_302
-            else 
+            else
                 if type(uri_302) == 'table' then
                     ngx.log(ngx.ERR, "req_uri:", req_uri, ", 302 uri is a table:", table.concat(uri_302, ","))
                 end
@@ -528,7 +534,7 @@ function http_req_3xx(method, uri, body, myheaders, timeout)
                 ngx.log(ngx.INFO, "after request: [",req_debug,"] res.status[", res.status, "]...")
             end
             return res, err, req_debug
-        end 
+        end
 
         jump_times = jump_times + 1
         ngx.log(ngx.INFO, "res.status[", res.status, "],res.body:[", res.body, "]")
@@ -537,7 +543,7 @@ function http_req_3xx(method, uri, body, myheaders, timeout)
             if uri_302 == nil then
                 ngx.log(ngx.ERR, "302 response Location missing!")
                 return res, "Location missing", req_debug
-            else 
+            else
                 if type(uri_302) == 'table' then
                     ngx.log(ngx.ERR, "request: [",req_debug,"] Location is a table :", table.concat(uri_302, ","))
                     uri_302 = uri_302[#uri_302]
@@ -547,10 +553,10 @@ function http_req_3xx(method, uri, body, myheaders, timeout)
                 url_302_set(req_uri,uri_302, url_302_cache_exptime)
                 req_uri = uri_302
             end
-        else 
+        else
             ngx.log(ngx.ERR, "302 response Location missing!")
             return res, "Location missing", req_debug
-        end       
+        end
     end
     if jump_times == max_jump_times then
         err = "reach the max jump times"
